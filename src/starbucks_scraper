@@ -1,0 +1,103 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
+import re
+
+# Set up Selenium WebDriver
+driver = webdriver.Chrome(service=ChromeService(
+    ChromeDriverManager().install()))
+
+# Function to scrape href attributes from <a> tags on a Starbucks URL using Selenium
+
+
+def scrape_starbucks_links(url):
+    driver.get(url)
+    driver.implicitly_wait(10)
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    a_tags = soup.find_all('a', class_='block linkOverlay__primary prodTile')
+    base_url = "https://www.starbucks.com"
+    links = [base_url + tag.get('href') for tag in a_tags if tag.get('href')]
+    return links
+
+# Function to scrape drink details from Starbucks URL using Selenium
+
+
+def scrape_starbucks_drink_selenium(url):
+    # Load the page
+    driver.get(url)
+
+    # Wait for the page to load completely
+    driver.implicitly_wait(10)
+
+    # Get page source and parse with BeautifulSoup
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+    # Find the element containing the drink name
+    drink_name_element = soup.find(
+        'h1', class_='sb-heading text-bold color-textWhite pb2 lg-pb3 productName___NApyx')
+
+    # Find all elements containing the desired information
+    all_elements_under = soup.find_all(
+        'div', class_='sb-fieldBase overflow-hidden')
+
+    # Dictionary to store the field names and their values
+    drink_details = {}
+
+    # Extract the drink name
+    drink_name = drink_name_element.get_text(
+        strip=True) if drink_name_element else "NaN"
+    drink_details["Drink Name"] = drink_name
+
+    for element in all_elements_under:
+        label_element = element.find('label', class_='floatLabel')
+        select_value_element = element.find(
+            'span', class_='select__selectedText')
+        p_value_element = element.find('p', class_='text-sm flex-grow')
+        hidden_label = element.find('div', class_='hiddenVisually')
+
+        # Extract the text from the elements
+        if label_element:
+            label = label_element.get_text(strip=True)
+            value = None
+
+            if select_value_element:
+                value = select_value_element.get_text(strip=True)
+            elif p_value_element:
+                value = p_value_element.get_text(strip=True)
+            elif hidden_label:
+                value = hidden_label.get_text(strip=True).split(
+                    ',')[0]  # Extract the first part before the comma
+
+            # Add the label and value to the drink details
+            if value:
+                # Use regular expression to find amounts followed by details
+                match = re.match(r"(\d+)\s+(.+)", value)
+                if match:
+                    amount = match.group(1)
+                    detail = match.group(2)
+                    drink_details[label] = detail
+                    drink_details[f"{label} Amount"] = amount
+                else:
+                    drink_details[label] = value
+
+    return drink_details
+
+
+# The URL of the Starbucks cold coffees page
+url = "https://www.starbucks.com/menu/drinks/cold-coffees"
+
+# Scrape the href attributes
+links = scrape_starbucks_links(url)
+
+# Iterate over each link to scrape drink details
+for link in links:
+    drink_details = scrape_starbucks_drink_selenium(link)
+    # Print the scraped details
+    print("Drink Details:")
+    for field, value in drink_details.items():
+        print(f"{field}: {value}")
+    print("=" * 17)
+
+# Close the driver
+driver.quit()
